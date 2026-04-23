@@ -2,12 +2,14 @@
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "hardware/adc.h"
+#include <iostream>
+#include <cstdint>
 
 using namespace std;
 
 typedef struct {
-	uint16_t adc0;
-	uint16_t adc1;
+	uint adc0;
+	uint adc1;
 } ADCValues;
 
 ADCValues readVoltage();
@@ -18,7 +20,7 @@ int main()
 	sleep_ms(2000);
 
 	adc_init(); 
-	adc_gpio_init(26); //Intializes pin26
+	adc_gpio_init(26); //z pin26
 	adc_gpio_init(27); //Intializes pin27
 	
 
@@ -64,6 +66,7 @@ int main()
 		}
 
 		lastIndex = currentIndex;
+        cout << "Counter: " << counter << endl;
 
 		sleep_ms(200);
 	
@@ -77,13 +80,14 @@ ADCValues readVoltage()
 	ADCValues result;
 
 	adc_select_input(0);        // GPIO 26
-	uint16_t raw0 = adc_read();
-	result.adc0 = (raw0 < 3000) ? 0 : 1;
-
+	uint raw0 = adc_read();
+	result.adc0 = (raw0 < 2300) ? 0 : 1;
+    //cout << "ADC0: " << raw0 << " -> " << result.adc0 << endl;
 
 	adc_select_input(1);        // GPIO 27
-	uint16_t raw1 = adc_read();
-	result.adc1 = (raw1 < 3000) ? 0 : 1;
+	uint raw1 = adc_read();
+	result.adc1 = (raw1 < 3100) ? 0 : 1;
+    //cout << "ADC1: " << raw1 << " -> " << result.adc1 << endl;
 
 	return result;
 }
