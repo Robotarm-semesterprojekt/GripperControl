@@ -62,6 +62,7 @@ void GreyCode() {
 			lastIndex = i;
 		}
 	}
+    
 	int currentIndex = 0;
 	while (true)
 	{
@@ -88,7 +89,10 @@ void GreyCode() {
 
 		lastIndex = currentIndex;
         //cout << "Counter: " << counter << endl;
-		//printf("Counter: %d\n", counter);
+        
+        printf("Counter: %d\n", counter);
+          
+		
 		sleep_ms(200);
 	
 	}
@@ -161,24 +165,28 @@ void SetPWMDutyCycle(int duty_cycle) {
     pwm_set_chan_level(slice, channel, duty_cycle);
 }
 
-void PWMUpRamping(int max_speed) {
-    for (int speed = 0; speed <= max_speed; speed += 1) {
+void PWMUpRamping(int max_speed, int stop) {
+    for (int speed = 0; speed <= max_speed; speed += 5) {
         SetPWMDutyCycle(speed);
         sleep_ms(10);
-        if (checkCurrent()) {
+        /*if (checkCurrent()) {
             maxCurrentExceeded = true;
             break;
-        }
+        }*/
+       if (counter == stop)
+       {
+        break;
+       }
     }
 }
 
 void PWMDownRamping(int max_speed) {
     for (int speed = max_speed; speed >= 0; speed -= 5) {
         SetPWMDutyCycle(speed);
-        if (checkCurrent()) {
+        /*if (checkCurrent()) {
             maxCurrentExceeded = true;
             break;
-        }
+        }*/
         sleep_ms(10);
     }
 }
@@ -189,10 +197,10 @@ void DriveMotor(int direction, int speed, int encoderStop, bool encoderHigh) {
 
     HbridgeControl(direction);
 
-    PWMUpRamping(speed);
+    PWMUpRamping(speed, encoderStop);
     if (encoderHigh == true) 
     {
-        while (counter < encoderStop || !maxCurrentExceeded)
+        while (counter < encoderStop && !maxCurrentExceeded)
         {
             sleep_ms(10);
             /*if (checkCurrent()) 
@@ -204,7 +212,7 @@ void DriveMotor(int direction, int speed, int encoderStop, bool encoderHigh) {
     }
     else 
     {
-      while (counter > encoderStop || !maxCurrentExceeded)
+      while (counter > encoderStop && !maxCurrentExceeded)
       {
             sleep_ms(10);
             /*if (checkCurrent()) 
@@ -277,7 +285,7 @@ int main () {
     multicore_launch_core1(GreyCode);
 
     while (true) {
-        maxCurrentExceeded = false; // Nulstil ved hver ny cyklus
+        //maxCurrentExceeded = false; // Nulstil ved hver ny cyklus
 
         // Åbn griberen
     
@@ -286,7 +294,7 @@ int main () {
         // Luk griberen
         //while (!maxCurrentExceeded && counter >= 1) {}
         DriveMotor(-1, 255, 0, false);
-        maxCurrentExceeded = checkCurrent();
+        //maxCurrentExceeded = checkCurrent();
         
         sleep_ms(2000);
     }
