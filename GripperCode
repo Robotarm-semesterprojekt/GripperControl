@@ -162,7 +162,7 @@ void SetPWMDutyCycle(int duty_cycle) {
 }
 
 void PWMUpRamping(int max_speed) {
-    for (int speed = 0; speed <= max_speed; speed += 5) {
+    for (int speed = 0; speed <= max_speed; speed += 1) {
         SetPWMDutyCycle(speed);
         sleep_ms(10);
         if (checkCurrent()) {
@@ -183,15 +183,42 @@ void PWMDownRamping(int max_speed) {
     }
 }
 
-void DriveMotor(int direction, int speed) {
+void DriveMotor(int direction, int speed, int encoderStop, bool encoderHigh) {
     SetPWMDutyCycle(0);
     sleep_ms(50);
 
     HbridgeControl(direction);
 
     PWMUpRamping(speed);
-    sleep_ms(switchIntervalMs);
-    PWMDownRamping(speed);
+    if (encoderHigh == true) 
+    {
+        while (counter < encoderStop || !maxCurrentExceeded)
+        {
+            sleep_ms(10);
+            /*if (checkCurrent()) 
+            {
+                //maxCurrentExceeded = true;
+                //break;
+            }*/
+        }
+    }
+    else 
+    {
+      while (counter > encoderStop || !maxCurrentExceeded)
+      {
+            sleep_ms(10);
+            /*if (checkCurrent()) 
+            {
+                //maxCurrentExceeded = true;
+                //break;
+            }*/
+        }
+        if (!encoderHigh)
+        {
+            sleep_ms(100);
+        }
+    }
+    //PWMDownRamping(speed);
 
     Pause();
 }
@@ -200,7 +227,7 @@ bool checkCurrent() {
     adc_select_input(0); // Select ADC channel 0 (GPIO 26)
     uint adcValue = adc_read();
     float current = adcValue * 3.3f / 4095.0f; // Since shunt resistor is 1 ohm, voltage across it equals current in amps
-    printf("Current: %.2f A\n", current);
+    //printf("Current: %.2f A\n", current);
     if (current > maxCurrent) { 
         return true;
     }
@@ -208,12 +235,12 @@ bool checkCurrent() {
     return false;
 }
 
-void RunMotorPWMTest(int PwmSpeed) {
+/*void RunMotorPWMTest(int PwmSpeed) {
     DriveMotor(1, PwmSpeed); // Forward
     sleep_ms(switchIntervalMs);
     DriveMotor(-1, PwmSpeed); // Reverse
     sleep_ms(switchIntervalMs);
-}
+}*/
 
 
 int main () {
@@ -253,15 +280,14 @@ int main () {
         maxCurrentExceeded = false; // Nulstil ved hver ny cyklus
 
         // Åbn griberen
-        while (counter < 5) {
-            DriveMotor(-1, 255);
-        }
+    
+        DriveMotor(1, 255, 1, true);
 
         // Luk griberen
-        while (!maxCurrentExceeded && counter >= 1) {
-            DriveMotor(1, 255);
-            maxCurrentExceeded = checkCurrent();
-        }
+        //while (!maxCurrentExceeded && counter >= 1) {}
+        DriveMotor(-1, 255, 0, false);
+        maxCurrentExceeded = checkCurrent();
+        
         sleep_ms(2000);
     }
 }
