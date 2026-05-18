@@ -1,31 +1,3 @@
-/*
-#include <stdio.h>
-#include "pico/stdlib.h"
-#include "hardware/adc.h"
-
-int main() {
-    stdio_init_all();
-    sleep_ms(2000);
-
-    gpio_init(20);
-    gpio_set_dir(20, GPIO_OUT);
-    gpio_put(20, 1); // Turn on the LED
-
-    adc_init();
-    adc_gpio_init(26);
-    adc_select_input(0);
-
-    while (true) {
-        gpio_put(20, 1); // Turn on the LED
-        uint16_t result = adc_read();
-        float voltage = result * 3.3f / 4095.0f;
-        printf("ADC raw: %d, Voltage: %.2f V\n", result, voltage);
-        sleep_ms(500);
-    }
-}
-
-*/
-
 #include <stdio.h>
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
@@ -90,7 +62,7 @@ void GreyCode() {
 		lastIndex = currentIndex;
         //cout << "Counter: " << counter << endl;
         
-        printf("Counter: %d\n", counter);
+        //printf("Counter: %d\n", counter);
           
 		
 		sleep_ms(200);
@@ -127,6 +99,8 @@ const int switchIntervalMs = 100; // 10 seconds
 const float maxCurrent = 0.6f; // Max current in amps
 bool maxCurrentExceeded = false;
 bool checkCurrent();
+void openGripper();
+void closeGripper();
 
 void HbridgeControl(int direction) {
     if (direction == 1) {
@@ -223,7 +197,7 @@ void DriveMotor(int direction, int speed, int encoderStop, bool encoderHigh) {
         }
         if (!encoderHigh)
         {
-            sleep_ms(100);
+            sleep_ms(200);
         }
     }
     //PWMDownRamping(speed);
@@ -243,12 +217,15 @@ bool checkCurrent() {
     return false;
 }
 
-/*void RunMotorPWMTest(int PwmSpeed) {
-    DriveMotor(1, PwmSpeed); // Forward
-    sleep_ms(switchIntervalMs);
-    DriveMotor(-1, PwmSpeed); // Reverse
-    sleep_ms(switchIntervalMs);
-}*/
+void openGripper() 
+{
+    DriveMotor(1, 255, 1, true);
+}
+
+void closeGripper()
+{
+    DriveMotor(-1, 255, 0, false);
+}
 
 
 int main () {
@@ -284,18 +261,25 @@ int main () {
 
     multicore_launch_core1(GreyCode);
 
+
     while (true) {
-        //maxCurrentExceeded = false; // Nulstil ved hver ny cyklus
+        int c = getchar_timeout_us(0);
 
-        // Åbn griberen
-    
-        DriveMotor(1, 255, 1, true);
+        if (c != PICO_ERROR_TIMEOUT) {
 
-        // Luk griberen
-        //while (!maxCurrentExceeded && counter >= 1) {}
-        DriveMotor(-1, 255, 0, false);
-        //maxCurrentExceeded = checkCurrent();
-        
-        sleep_ms(2000);
+            if (c == '1') {
+                closeGripper();
+                printf("IN_POSITION_CLOSED\n");
+                
+            }
+
+            else if (c == '0') {
+                openGripper();
+                printf("IN_POSITION_OPEN\n");
+            }
+        }
+
+        sleep_ms(10);
+
     }
 }
