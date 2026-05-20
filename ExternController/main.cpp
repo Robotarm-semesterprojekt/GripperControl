@@ -1,18 +1,17 @@
-  #include <fcntl.h>
+#include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
 
 #include <cstring>
 #include <iostream>
 
-int main() {
-    const char* port = "/dev/ttyACM0";
+int setup_serial(const char* port) {
 
     int serial_port = open(port, O_RDWR);
 
     if (serial_port < 0) {
-        std::cerr << "Failed to open serial port\n";
-        return 1;
+        std::cerr << "Failed to open " << port << std::endl;
+        return -1;
     }
 
     termios tty{};
@@ -33,40 +32,90 @@ int main() {
 
     tcsetattr(serial_port, TCSANOW, &tty);
 
-    std::cout << "Press 1 to close, 0 to open, q to quit\n";
+    return serial_port;
+}
+
+
+void send_and_receive(int serial, const char* name, char cmd) {
+
+    tcflush(serial, TCIFLUSH);
+
+    write(serial, &cmd, 1);
+
+    std::cout << "Sent to " << name << ": " << cmd << std::endl;
+
+    usleep(50000); // optional 50ms delay
+
+    char buffer[256];
+    memset(buffer, 0, sizeof(buffer));
+
+    int total = 0;
 
     while (true) {
 
-        char cmd;
-        std::cin >> cmd;
+        int n = read(serial,
+                     buffer + total,
+                     sizeof(buffer) - total - 1);
 
-        if (cmd == 'q') {
+        if (n <= 0)
             break;
-        }
 
-        if (cmd == '0' || cmd == '1') {
+        total += n;
 
-            // Send command to Pico
-            write(serial_port, &cmd, 1);
-
-            std::cout << "Sent: " << cmd << std::endl;
-
-            // Wait for response from Pico
-            char buffer[256];
-
-            memset(buffer, 0, sizeof(buffer));
-
-            int n = read(serial_port, buffer, sizeof(buffer) - 1);
-
-            if (n > 0) {
-                buffer[n] = '\0';
-
-                std::cout << "Pico says: " << buffer << std::endl;
-            }
-        }
+        // Stop on newline
+        if (buffer[total - 1] == '\n')
+            break;
     }
 
-    close(serial_port);
+    if (total > 0) {
+        buffer[total] = '\0';
+        std::cout << name << " says: " << buffer << std::endl;
+    }
+}
+
+
+int main() {
+
+    // Pico dispenser
+    const char* pico_port = "/dev/ttyACM0";
+
+    // Second serial device
+    const char* second_port = "/dev/ttyACM1";
+
+    int pico_serial = setup_serial(pico_port);
+    int second_serial = setup_serial(second_port);
+
+    if (pico_serial < 0 || second_serial < 0) {
+        return 1;
+    }
+
+    std::cout << "Press:\n";
+    std::cout << "1 = Send to Pico\n";
+    std::cout << "2 = Send to ttyACM1\n";
+    std::cout << "q = Quit\n";
+
+
+	while (true) {
+
+	    char cmd;
+	    std::cin >> cmd;
+
+	    if (cmd == 'q')
+		break;
+
+	    if (cmd == '1' || cmd == '0') {
+		send_and_receive(pico_serial, "Pico", cmd);
+	    }
+
+	    if (cmd == '2') {
+		send_and_receive(second_serial, "ttyACM1", cmd);
+	    }
+	}
+      
+    
+
+    close(pico_serial);
+    close(second_serial);
 
     return 0;
 }
