@@ -4,8 +4,10 @@
 #include "hardware/adc.h"
 #include "hardware/pwm.h"
 #include "pico/multicore.h"
+#include <array>
 
 volatile int counter = 0;
+volatile bool maxCurrentExceeded = false;
 
 typedef struct {
 	uint adc0;
@@ -13,12 +15,16 @@ typedef struct {
 } ADCValues;
 
 ADCValues readVoltage();
-void GreyCode();
+int GreyCode(int lastIndex);
+float checkCurrent();
 
-void GreyCode() {
+const float maxCurrent = 0.2f; // Max current in amps
 
+void Core1();
 
-	int grayCodeOrder[4][2] = {
+void Core1() {
+    
+    int grayCodeOrder[4][2] = {
 	{0, 0},
 	{0, 1},
 	{1, 1},
@@ -35,39 +41,71 @@ void GreyCode() {
 		}
 	}
     
-	int currentIndex = 0;
-	while (true)
-	{
-		ADCValues values = readVoltage();
-		currentIndex = 0;
-		for (int i = 0; i < 4; i++)
-		{
-			if (values.adc0 == grayCodeOrder[i][0] && values.adc1 == grayCodeOrder[i][1])
-			{
-				currentIndex = i;
-			}
-		}
+    std::array<float, 10> currentReadings{};
+    size_t next =0;
 
-		int rotation = currentIndex - lastIndex;
+    while (true)
+    {
+        lastIndex = GreyCode(lastIndex);
+        currentReadings[next] = checkCurrent();
+        next = (next + 1) % currentReadings.size();
 
-		if (rotation == 1 || rotation == -3)
-		{
-			counter++;
-		}
-		else if (rotation == -1 || rotation == 3)
-		{
-			counter--;
-		}
+        float sumCurrent = 0.0f;
+        for (float reading : currentReadings) {
+            sumCurrent += reading;
+        }
+        float averageCurrent = sumCurrent / currentReadings.size();
+        if (averageCurrent > maxCurrent) {
+            maxCurrentExceeded = true;
+        } else {
+            maxCurrentExceeded = false;
+        }
+        if (next % 5 == 0)
+        {
+           // printf("Average Current: %.3f A\n", averageCurrent);
+        }
 
-		lastIndex = currentIndex;
-        //cout << "Counter: " << counter << endl;
-        
-        //printf("Counter: %d\n", counter);
-          
-		
-		sleep_ms(200);
-	
-	}
+        sleep_ms(100);
+    }
+}
+
+int GreyCode(int lastIndex) {
+    int grayCodeOrder[4][2] = {
+    {0, 0},
+    {0, 1},
+    {1, 1},
+    {1, 0}
+    };
+
+    int currentIndex;
+
+    ADCValues values = readVoltage();
+    for (int i = 0; i < 4; i++)
+    {
+        if (values.adc0 == grayCodeOrder[i][0] && values.adc1 == grayCodeOrder[i][1])
+        {
+            currentIndex = i;
+        }
+    }
+
+    int rotation = currentIndex - lastIndex;
+
+    if (rotation == 1 || rotation == -3)
+    {
+        counter++;
+    }
+    else if (rotation == -1 || rotation == 3)
+    {
+        counter--;
+    }
+
+    return currentIndex;
+    //cout << "Counter: " << counter << endl;
+    
+    //printf("Counter: %d\n", counter);
+    sleep_ms(10);
+
+
 }
 ADCValues readVoltage()
 {
@@ -75,13 +113,13 @@ ADCValues readVoltage()
 
 	adc_select_input(1);        // GPIO 27
 	uint raw0 = adc_read();
-	result.adc0 = (raw0 < 1600) ? 0 : 1;
-//    printf("ADC0: %d -> %d\n", raw0, result.adc0);
+	result.adc0 = (raw0 < 2400) ? 0 : 1;
+    //printf("ADC0: %d -> %d\n", raw0, result.adc0);
 
 	adc_select_input(2);        // GPIO 28
 	uint raw1 = adc_read();
 	result.adc1 = (raw1 < 2400) ? 0 : 1;
-//    printf("ADC1: %d -> %d\n", raw1, result.adc1);
+   // printf("ADC1: %d -> %d\n", raw1, result.adc1);
 
 	return result;
 }
@@ -94,11 +132,10 @@ const int LDRPin = 20; // On-board LED
 
 const int ADCpin = 26; // ADC0
 
-const int switchIntervalMs = 100; // 10 seconds
+const int switchIntervalMs = 10000; // 10 seconds
 
-const float maxCurrent = 0.6f; // Max current in amps
-bool maxCurrentExceeded = false;
-bool checkCurrent();
+
+
 void openGripper();
 void closeGripper();
 
@@ -117,11 +154,11 @@ void HbridgeControl(int direction) {
     }
 }
 
-void Pause() {
+void Pause(int timeMS) {
     gpio_put(Hbridgepin1, 0);
     gpio_put(Hbridgepin2, 0);
     gpio_put(HbridgepinOnOff, 0); // OFF
-    sleep_ms(switchIntervalMs);
+    sleep_ms(timeMS);
 }
 
 
@@ -143,10 +180,7 @@ void PWMUpRamping(int max_speed, int stop) {
     for (int speed = 0; speed <= max_speed; speed += 5) {
         SetPWMDutyCycle(speed);
         sleep_ms(10);
-        /*if (checkCurrent()) {
-            maxCurrentExceeded = true;
-            break;
-        }*/
+       
        if (counter == stop)
        {
         break;
@@ -157,10 +191,7 @@ void PWMUpRamping(int max_speed, int stop) {
 void PWMDownRamping(int max_speed) {
     for (int speed = max_speed; speed >= 0; speed -= 5) {
         SetPWMDutyCycle(speed);
-        /*if (checkCurrent()) {
-            maxCurrentExceeded = true;
-            break;
-        }*/
+       
         sleep_ms(10);
     }
 }
@@ -174,14 +205,10 @@ void DriveMotor(int direction, int speed, int encoderStop, bool encoderHigh) {
     PWMUpRamping(speed, encoderStop);
     if (encoderHigh == true) 
     {
-        while (counter < encoderStop && !maxCurrentExceeded)
+        while (counter < encoderStop)
         {
             sleep_ms(10);
-            /*if (checkCurrent()) 
-            {
-                //maxCurrentExceeded = true;
-                //break;
-            }*/
+            
         }
     }
     else 
@@ -189,37 +216,39 @@ void DriveMotor(int direction, int speed, int encoderStop, bool encoderHigh) {
       while (counter > encoderStop && !maxCurrentExceeded)
       {
             sleep_ms(10);
-            /*if (checkCurrent()) 
-            {
-                //maxCurrentExceeded = true;
-                //break;
-            }*/
+            
         }
-        if (!encoderHigh)
+        /*if (!encoderHigh)
         {
             sleep_ms(200);
-        }
+        }*/
+        
+     if (maxCurrentExceeded)
+     {
+     	printf("Current Exceeded");
+     	Pause(5000);
+     }
     }
     //PWMDownRamping(speed);
 
-    Pause();
+    Pause(100);
 }
 
-bool checkCurrent() {
+float checkCurrent() {
     adc_select_input(0); // Select ADC channel 0 (GPIO 26)
     uint adcValue = adc_read();
     float current = adcValue * 3.3f / 4095.0f; // Since shunt resistor is 1 ohm, voltage across it equals current in amps
-    //printf("Current: %.2f A\n", current);
-    if (current > maxCurrent) { 
-        return true;
-    }
-
-    return false;
+    /*if (current > 0.13f)
+    {
+        printf("Current: %.2f A\n", current);
+    }*/
+    return current;
+    
 }
 
 void openGripper() 
 {
-    DriveMotor(1, 255, 1, true);
+    DriveMotor(1, 255, 2, true);
 }
 
 void closeGripper()
@@ -259,7 +288,7 @@ int main () {
 
     InitPWM();
 
-    multicore_launch_core1(GreyCode);
+    multicore_launch_core1(Core1);
 
 
     while (true) {
@@ -277,9 +306,14 @@ int main () {
                 openGripper();
                 printf("IN_POSITION_OPEN\n");
             }
+           else if (c == '3') {
+                DriveMotor(-1, 255, counter-1, false);
+                printf("IN_POSITION_CLOSED\n");
+                
+            }
         }
 
-        sleep_ms(10);
+        sleep_ms(1);
 
     }
 }
