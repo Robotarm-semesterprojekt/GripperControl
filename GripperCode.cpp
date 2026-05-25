@@ -113,12 +113,12 @@ ADCValues readVoltage()
 
 	adc_select_input(1);        // GPIO 27
 	uint raw0 = adc_read();
-	result.adc0 = (raw0 < 2400) ? 0 : 1;
+	result.adc0 = (raw0 < 2600) ? 0 : 1;
     //printf("ADC0: %d -> %d\n", raw0, result.adc0);
 
 	adc_select_input(2);        // GPIO 28
 	uint raw1 = adc_read();
-	result.adc1 = (raw1 < 2400) ? 0 : 1;
+	result.adc1 = (raw1 < 2600) ? 0 : 1;
    // printf("ADC1: %d -> %d\n", raw1, result.adc1);
 
 	return result;
